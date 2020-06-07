@@ -3,6 +3,7 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=1.0, minimum-scale=1.0, maximum-scale=1.0">
+		<title>ChatterBox</title>
 	</head>
 	<body>
 		<div><p><b>ChatterBox</b></p></div>
@@ -12,7 +13,9 @@
 		</noscript>
 		<div id="l"></div>
 		<div id="f">
-			<textarea type="text" id="t"></textarea><button id="s">Post</button>
+			<input type="text" id="u" value="Anon">
+			<textarea type="text" id="t"></textarea>
+			<button id="s">Post</button>
 		</div>
 	
 		<script type="text/javascript">
@@ -45,7 +48,10 @@
 			setInterval(g,1000);
 			
 			$('s').addEventListener('click',e=>{
-				fetch('./post',{method:'POST',body:$('t').value})
+				var fd = new FormData();
+				fd.append('user', $('u').value);
+				fd.append('mesg', $('t').value);
+				fetch('./post',{method:'POST',body: fd})
 					.then(r=>{
 						$('t').value='';
 						g();
@@ -74,10 +80,22 @@
 				margin:0;
 				word-wrap:break-word;
 			}
-			textarea{
-				flex:1 0 auto;
+			#u,#t,#s{
 				padding:0;
 				line-height:50px;
+				font-size:20px;
+				height:50px;
+			}
+			#t{
+				flex:1 0 auto;
+				margin-bottom:0px;
+				margin-top:0px;
+			}
+			#u{
+				width:100px;
+			}
+			#s{
+				padding:0 1em;
 			}
 			html,body{
 				width:100%;
@@ -90,13 +108,6 @@
 			body{
 				display:flex;
 				flex-direction:column;
-			}
-			textarea,button{
-				font-size:20px;
-				height:50px;
-			}
-			button{
-				padding:0 1em;
 			}
 		</style>
 	</body>
