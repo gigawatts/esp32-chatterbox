@@ -1,5 +1,7 @@
-/*
- *  Forked from https://github.com/fenwick67/esp32-chatterbox
+/*  ESP32 ChatterBox
+ *  Running on a Sparkfun ESP32 Thing
+ *  Source available at: https://github.com/gigawatts/esp32-chatterbox 
+ *  Forked from: https://github.com/fenwick67/esp32-chatterbox
  *  See README.md for more info
 */
 
@@ -25,6 +27,22 @@ WebServer server(80);
 
 const char* filename = "/posts.txt";
 
+// comment out the below line if you don't want to blink a LED when a new message arrives
+#define MESG_NOTIFY
+
+#ifdef MESG_NOTIFY
+#define LED 13
+unsigned long previousMillis = 0;  // will store last time LED was updated
+const long interval = 200;  // interval at which to blink (milliseconds)
+const int maxBlinkCount = 20;  // number of times to toggle the LED
+int blinkCount = 0;  // keeps track of how many times we have blinked
+int ledState = LOW;  // ledState used to set the LED
+
+bool newMessage = false;
+#endif
+
+
+// Functions -------------------------------------------
 void sendPage(){
   Serial.println("GET /");
   server.send(200,"text/html",HTMLPAGE);
@@ -40,7 +58,7 @@ void sendMessages(){
   file.close();
 }
 
-//void downloadMessages(){ }
+//void downloadFile(){ }
 
 void receiveMessage(){
   //Serial.println("POST /post");
@@ -53,18 +71,13 @@ void receiveMessage(){
   if(!file){
       Serial.println("- failed to open file for writing");
   }
-  if(argCount == 1){
-    String msg = server.arg(0);
-    String line = "Anon: " + msg;
-    line.replace(String(RECORD_SEP),String(""));
-    file.print(line);
-    file.print(RECORD_SEP);
-    Serial.print("New message: ");
-    Serial.println(line);
-  } else if (argCount == 2){
+  
+  if (argCount == 2){
     //with argument names
     String user = "Anon";
     String mesg = "";
+
+    // parse POST arguments for user and mesg
     for (int i = 0; i < server.args(); i++) {
       if(server.argName(i) == "user"){
         user = server.arg(i);
@@ -73,17 +86,18 @@ void receiveMessage(){
       }
     }
 
-    //String user = server.arg(0);
-    //String mesg = server.arg(1);
     String line = user + ": " + mesg;
     line.replace(String(RECORD_SEP),String(""));
     file.print(line);
     file.print(RECORD_SEP);
+    #ifdef MESG_NOTIFY
+      newMessage = true;
+      blinkCount = 0;
+    #endif
     Serial.print("New message: ");
     Serial.println(line);
   }
   file.close();
-  
   server.send(200,"text.plain","");
 }
 
@@ -94,31 +108,31 @@ void eraseHistory(){
   file_write.close();      
   Serial.println("file erased");
 }
+
 void clearMessages(){
   eraseHistory();
-  String message = "<html>Messages cleared</html>";
+  String message = "<html>"
+  "<head><meta http-equiv='Refresh' content='3; URL=/'></head>"
+  "Messages cleared!<br>Redirecting in 3 seconds..."
+  "</html>";
   server.send(200, "text/html", message);
 }
 
 void browseFiles(){
+  // Code borrowed from https://www.esp8266.com/viewtopic.php?p=80943
   Serial.println("GET /browse");
-  String message;
-  message += "<!DOCTYPE HTML>";
-  message += "<html>";
+  String message = "<!DOCTYPE HTML><html>";
   message += "<head><title>SPIFFS Browser</title><head />";
   message += "<body>";
   // print all the files, use a helper to keep it clean
   message += "<h2>SPIFFS Browser</h2>";
-  
   if (!SPIFFS.begin(true))
   {
     Serial.println("An Error has occurred while mounting SPIFFS");
     return;
   }
-  
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
-
   while (file)
   {
     message += "<a href=\"";
@@ -131,17 +145,16 @@ void browseFiles(){
     message += "<br>\r\n";
     file = root.openNextFile();
   }
-
-  message += "</body>";
-  message += "</html>";
-
+  message += "</body></html>";
   server.send(200, "text/html", message);
 }
 
 void updateForm(){
-  String message = 
-  "<!DOCTYPE html><html lang='en'>"
-  "<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'/></head>"
+  String message = "<!DOCTYPE html><html lang='en'>"
+  "<head>"
+  "<meta charset='utf-8'>"
+  "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
+  "</head>"
   "<body>"
   "<form method='POST' action='' enctype='multipart/form-data'>"
   "Firmware:<br><input type='file' accept='.bin,.bin.gz' name='firmware'>"
@@ -151,12 +164,18 @@ void updateForm(){
   "FileSystem:<br><input type='file' accept='.bin,.bin.gz' name='filesystem'>"
   "<input type='submit' value='Update FileSystem'>"
   "</form></body></html>";
-
   server.send(200, "text/html", message);
 }
 
+// End of Functions -------------------------------------------
+
 void setup() {
-  Serial.begin(115200);  
+  Serial.begin(115200);
+
+  #ifdef MESG_NOTIFY
+    pinMode(LED, OUTPUT);
+  #endif
+
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
     Serial.println("SPIFFS Mount Failed");
     return;
@@ -181,7 +200,7 @@ void setup() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_AP);
   WiFi.softAP("ChatterBox");
-  delay(2000);
+  delay(2000);  // stops ESP32 crash on new client connect
   WiFi.softAPConfig(apIP, gateway, subnet);
 
   // if DNSServer is started with "*" for domain name, it will reply with
@@ -193,11 +212,11 @@ void setup() {
   server.on("/index.html", HTTP_GET, sendPage);
   server.on("/posts", HTTP_GET, sendMessages);
   server.on("/post", HTTP_POST, receiveMessage);
-  //server.on(filename, HTTP_GET, downloadFile);
   server.on("/clear", HTTP_GET, clearMessages);
   server.on("/browse", HTTP_GET, browseFiles);
+  //server.on(filename, HTTP_GET, downloadFile);
 
-  /*handling uploading firmware file */
+  // handling uploading firmware file
   server.on("/update", HTTP_GET, updateForm);
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
@@ -260,5 +279,29 @@ void loop() {
       Serial.println("## End of File ##");
     }
   }
-  
+
+  #ifdef MESG_NOTIFY
+  //loop to blink a LED without delay
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+    
+    // only blink the LED if a new message arrived recently
+    if (newMessage == true) {
+      // if the LED is off turn it on and vice-versa:
+      ledState = not(ledState);
+      // set the LED with the ledState of the variable:
+      digitalWrite(LED, ledState);
+      blinkCount++;
+    } 
+    
+    if (blinkCount >= maxBlinkCount) {
+      newMessage = false;
+      digitalWrite(LED, LOW);
+    }
+  }
+  #endif
+
 }

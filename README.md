@@ -20,7 +20,9 @@ Run: `node build-html.js`
 
 Connect to the ESP32 over wifi (AP name "ChatterBox"), then navigate to http://10.1.1.1
 
-From there, you can set a username and leave messages. 
+From there, you can set a username and leave messages.
+
+To indicate when a new message arrives, a LED can be configured to blink.
 
 There is an OTA Web update page at `http://10.1.1.1/update`
 
